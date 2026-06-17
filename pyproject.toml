@@ -1,0 +1,11 @@
+[project]
+name = "klarna-ds-case-study"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "marimo>=0.23.9",
+    "plotly>=6.8.0",
+    "polars>=1.41.2",
+]
