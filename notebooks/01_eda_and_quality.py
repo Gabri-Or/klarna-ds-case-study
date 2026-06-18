@@ -16,7 +16,7 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(f"""
+    mo.md("""
     ## 1. Data loading
     """)
     return
