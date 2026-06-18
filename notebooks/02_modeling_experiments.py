@@ -526,8 +526,11 @@ def _(comparison_df, go, mo, pl):
     return
 
 
-@app.cell
-def _():
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Xgboost only slightly improves on a simple logistic regression; moreover, we need to calibrate it in order to get a comparable Brier score and calibration score.
+    """)
     return
 
 
