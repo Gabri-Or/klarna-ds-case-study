@@ -27,6 +27,30 @@ Your solution should contain:
 
 Our advice is to avoid spending too much time optimizing your prediction results. We are more interested in how you structure your solution, how you reason about the problem and how you validate your results. Showing off your skills in model building, analysis, and software engineering is more important than maximizing predictive performance. Good luck!
 
+## Data Processing Pipeline
+
+The exploratory notebook findings are distilled into a small Polars pipeline under `src/klarna_ds_case_study/`.
+
+The pipeline:
+
+- loads `data/raw/mlcasestudy Final.csv` with explicit Polars dtypes;
+- validates raw and processed dataframes with Pandera's Polars integration;
+- creates `default_14d` and `default_21d` targets from outstanding balances;
+- removes exact duplicates and duplicate `loan_id` rows, keeping the first occurrence;
+- imputes small card expiry missingness;
+- imputes missing `existing_klarna_debt` to zero and clamps negative values to zero;
+- maps negative `days_since_first_loan` sentinel values to zero;
+- collapses sparse `merchant_category` values into `Other`;
+- drops post-issue outstanding-balance leakage columns from the modeling file;
+- writes `data/processed/loans_processed.parquet` with typed columns.
+
+Run it from the project root with:
+
+```zsh
+PYTHONPATH=src uv run python -m klarna_ds_case_study.data_processing.main
+```
+
+
 ## Data Dictionary
 
 | Feature | Definition |

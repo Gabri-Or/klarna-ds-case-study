@@ -5,13 +5,20 @@ description = "Machine learning classification case study for the Data Science i
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "marimo>=0.23.9",
-    "plotly>=6.8.0",
+    "pandera[polars]>=0.25.0",
     "polars>=1.41.2",
-    "pydantic-ai>=1.107.0",
+    "pyarrow>=16.0.0",
 ]
 
 [dependency-groups]
 dev = [
+    "marimo>=0.23.9",
+    "plotly>=6.8.0",
     "pre-commit>=4.6.0",
+    "pydantic-ai>=1.107.0",
+    "pytest>=8.4.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
