@@ -4,11 +4,20 @@ import pandera.polars as pa
 import polars as pl
 from pandera.typing import polars as pt
 
-from klarna_ds_case_study.data_processing.config import PROCESSED_COLUMNS, RAW_COLUMNS
-
 
 def _all_rows(data: Any, expr: pl.Expr) -> bool:
     return bool(data.lazyframe.select(expr.fill_null(False).all()).collect().item())
+
+
+def schema_column_names(schema_model) -> list[str]:
+    return list(schema_model.to_schema().columns)
+
+
+def schema_column_dtypes(schema_model):
+    return {
+        name: column.dtype.type
+        for name, column in schema_model.to_schema().columns.items()
+    }
 
 
 class RawLoans(pa.DataFrameModel):
@@ -110,13 +119,9 @@ class ProcessedLoans(pa.DataFrameModel):
     loan_amount: pt.Series[pl.Int64] = pa.Field(gt=0)
     card_expiry_month: pt.Series[pl.UInt8] = pa.Field(ge=1, le=12)
     card_expiry_year: pt.Series[pl.Int32] = pa.Field(ge=2023)
-    card_expiry_missing: pt.Series[pl.Boolean]
     existing_klarna_debt: pt.Series[pl.Int64] = pa.Field(ge=0)
-    existing_klarna_debt_missing: pt.Series[pl.Boolean]
-    existing_klarna_debt_was_negative: pt.Series[pl.Boolean]
     num_active_loans: pt.Series[pl.Int64] = pa.Field(ge=0)
     days_since_first_loan: pt.Series[pl.Int64] = pa.Field(ge=0)
-    days_since_first_loan_was_negative: pt.Series[pl.Boolean]
     has_prior_loan: pt.Series[pl.Boolean]
     new_exposure_7d: pt.Series[pl.Int64] = pa.Field(ge=0)
     new_exposure_14d: pt.Series[pl.Int64] = pa.Field(ge=0)
@@ -189,6 +194,3 @@ class ProcessedLoans(pa.DataFrameModel):
         strict = True
         ordered = True
 
-
-assert list(RawLoans.to_schema().columns) == RAW_COLUMNS
-assert list(ProcessedLoans.to_schema().columns) == PROCESSED_COLUMNS
