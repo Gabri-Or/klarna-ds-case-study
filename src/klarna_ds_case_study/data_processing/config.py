@@ -7,4 +7,3 @@ PROCESSED_DATA_PATH = PROJECT_ROOT / "data" / "processed" / "loans_processed.par
 MIN_MERCHANT_CATEGORY_COUNT = 100
 UNKNOWN_CATEGORY = "Unknown"
 OTHER_CATEGORY = "Other"
-
