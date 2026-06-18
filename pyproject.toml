@@ -18,3 +18,7 @@ dev = [
     "pydantic-ai>=1.107.0",
     "pytest>=8.4.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
