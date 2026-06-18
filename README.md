@@ -37,9 +37,9 @@ The pipeline:
 - validates raw and processed dataframes with Pandera's Polars integration;
 - creates `default_14d` and `default_21d` targets from outstanding balances;
 - removes exact duplicates and duplicate `loan_id` rows, keeping the first occurrence;
-- imputes small card expiry missingness and preserves a `card_expiry_missing` flag;
+- imputes small card expiry missingness;
 - imputes missing `existing_klarna_debt` to zero and clamps negative values to zero;
-- maps negative `days_since_first_loan` sentinel values to zero and stores history flags;
+- maps negative `days_since_first_loan` sentinel values to zero;
 - collapses sparse `merchant_category` values into `Other`;
 - drops post-issue outstanding-balance leakage columns from the modeling file;
 - writes `data/processed/loans_processed.parquet` with typed columns.
