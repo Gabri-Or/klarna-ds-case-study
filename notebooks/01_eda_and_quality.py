@@ -15,26 +15,6 @@ def _():
 
 
 @app.cell
-def _(Path):
-    PROJECT_ROOT = Path(__file__).resolve().parents[1]
-    DATA_PATH = PROJECT_ROOT / "data" / "mlcasestudy Final.csv"
-    return (DATA_PATH,)
-
-
-@app.cell
-def _(DATA_PATH, pl):
-    raw_df = pl.scan_csv(DATA_PATH, try_parse_dates=True)
-
-    df = raw_df.with_columns(
-    	(pl.col("amount_outstanding_21d") > 0).alias("default_21d")
-    ).collect()
-
-    row_count = df.height
-    column_count = df.width
-    return (df,)
-
-
-@app.cell
 def _(mo):
     mo.md(f"""
     ## 1. Data loading
@@ -43,8 +23,42 @@ def _(mo):
 
 
 @app.cell
+def _(Path):
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    DATA_PATH = PROJECT_ROOT / "data" / "mlcasestudy Final.csv"
+    return (DATA_PATH,)
+
+
+@app.cell
+def _(DATA_PATH, pl):
+    df = pl.scan_csv(DATA_PATH, try_parse_dates=True)
+
+    row_count = df.height
+    column_count = df.width
+    return column_count, df, row_count
+
+
+@app.cell
+def _(column_count, default_rate, mo, row_count):
+    mo.md(f"The dataset consists of {row_count:,} rows and {column_count:,} columns, with a 21-day default rate of {default_rate:.1%}.")
+    return
+
+
+@app.cell
 def _(df):
-    df.head(10)
+    df
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Each row represents a loan, identified by `loan_id` and dated by `loan_issue_date`; we know the initial amount of the loan and the outstanding after 14 and 21 days, which are the two deadlines for repayment.
+
+    Next we have information on the current card associated with the loan, and on the credit history of the consumer.
+
+    Finally, the last two columns describe the merchant the financed purchase is associated to.
+    """)
     return
 
 
@@ -67,10 +81,64 @@ def _(mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.1 Date coverage
+    """)
+    return
+
+
 @app.cell
 def _(df, pl):
+    date_range = df.select(
+    	pl.min("loan_issue_date").alias("min_loan_issue_date"),
+    	pl.max("loan_issue_date").alias("max_loan_issue_date"),
+    	pl.col("loan_issue_date").n_unique().alias("distinct_issue_dates"),
+    )
+    return (date_range,)
+
+
+@app.cell
+def _(date_range):
+    date_range
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.2 Target definition and prevalence
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    For the moment, let's focus on the 21-days target which is the hardest deadline for repayment.
+    """)
+    return
+
+
+@app.cell
+def _(df, pl):
+    target_df = df.with_columns(
+    	(pl.col("amount_outstanding_14d") > 0).alias("default_14d"),
+    	(pl.col("amount_outstanding_21d") > 0).alias("default_21d"),
+    )
+
+    target_df.select(
+    	pl.mean("default_14d").alias("default_rate_14d"),
+    	pl.mean("default_21d").alias("default_rate_21d"),
+    )
+    return (target_df,)
+
+
+@app.cell
+def _(pl, target_df):
     target_summary = (
-    	df.group_by("default_21d")
+    	target_df.group_by("default_21d")
     	.agg(
     		pl.len().alias("loans"),
     		pl.sum("loan_amount").alias("loan_amount_total"),
@@ -95,22 +163,20 @@ def _(df, pl):
     	)
     	.sort("default_21d")
     )
-
-    default_rate = df.select(pl.mean("default_21d")).item()
     return (target_summary,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 2.1 Target definition and prevalence
-    """)
-    return
 
 
 @app.cell
 def _(target_summary):
     target_summary
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Defaulted loans amount to about 5% and do not seem to differ significantly by their amount; on average, the outstanding at default time is a bit less than 50% the initial amount.
+    """)
     return
 
 
@@ -134,6 +200,14 @@ def _(go, mo, target_summary):
     	height=500,
     )
     mo.ui.plotly(_fig)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.3 Numeric feature profile
+    """)
     return
 
 
@@ -161,17 +235,86 @@ def _(df, numeric_columns, pl):
     return (numeric_profile,)
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 2.2 Numeric feature profile
-    """)
+@app.cell
+def _(numeric_profile):
+    numeric_profile
     return
 
 
 @app.cell
-def _(numeric_profile):
-    numeric_profile
+def _(mo, numeric_columns):
+    numeric_feature_dropdown = mo.ui.dropdown(
+    	options=numeric_columns,
+    	value=numeric_columns[0],
+    	label="Select numeric feature",
+    )
+    return (numeric_feature_dropdown,)
+
+
+@app.cell
+def _(df, go, mo, numeric_feature_dropdown, pl):
+    _selected_numeric_feature = numeric_feature_dropdown.value
+    _distribution_plot_df = df.select(
+    	pl.col(_selected_numeric_feature).alias("value")
+    ).drop_nulls()
+
+    _distribution_values = _distribution_plot_df["value"].to_list()
+
+    _distribution_fig = go.Figure()
+
+    _distribution_fig.add_trace(
+    	go.Histogram(
+    		x=_distribution_values,
+    		name=_selected_numeric_feature,
+    		nbinsx=60,
+    		marker_color="#2E86AB",
+    		opacity=0.85,
+            histnorm="percent",
+    		hovertemplate=(
+    			f"{_selected_numeric_feature}: %{{x}}<br>"
+    			"Count: %{y:,}<extra></extra>"
+    		),
+    	)
+    )
+
+    _distribution_fig.update_layout(
+    	title=f"Distribution of {_selected_numeric_feature}",
+    	xaxis_title=_selected_numeric_feature,
+    	yaxis_title="Loans",
+    	yaxis_tickformat=",",
+    	yaxis2={
+    		"visible": False,
+    		"overlaying": "y",
+    		"range": [0, 1],
+    	},
+    	bargap=0.03,
+    	height=520,
+    	showlegend=False,
+    	template="plotly_white",
+    )
+
+    mo.vstack(
+    	[
+    		numeric_feature_dropdown,
+    		mo.ui.plotly(_distribution_fig),
+    	]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Some considerations on the distributions of the numeric features:
+    - `loan_amount` shows a skewed distribution akin to an inverse power law, with a thin long tail of high-value loans; `amount_outstanding_14d` and `amount_outstanding_21d` are even more skewed, but they contain a more complex mixture of zeroes (for fully repaid loans) and positive values with a similar long-tail pattern, which we will study later in more detail.
+    - `card_expiry_month` and `card_expiry_year` display what we would expect: uniform distribution for month, and a bell-like curve centered around 2-4 years after the loan issue dates in the dataset (all from 2023) and with a small tail.
+    - `existing_klarna_debt` is also right-skewed like the "amount" columns, but it also has some negative values. Since we don't have information on their meaning, we will probably clamp them to zero.
+    - `num_active_loans` shows that most loans in the dataset occur as first loans (zero active loans at the time of issue), but there are also a few customers with high counts that might be worth investigating, since having so many active loans could be a sign of financial distress or reckless behavior.
+    - `days_since_first_loan` has a surprising 32% of "-1" values, all associated with "0" or "null" `existing_klarna_debt`. To be investigated further.
+    - `new_exposure_7d`, `new_exposure_14d`, `num_confirmed_payments_3m` and `num_confirmed_payments_6m` show once again the typical right-skewed shape of other numeric columns.
+    - `num_failed_payments_3m`, `num_failed_payments_6m` and `num_failed_payments_1y` all have more than 95% of zeroes, which suggest that failed payments are relatively rare events in the customer history, but they might still be important predictors of default risk.
+    - finally, all the `amount_repaid` columns are once again right-skewed with a large share of zeroes, which is consistent with the fact that many customers do not have any repayment history with Klarna, but for those who do, the amounts can vary widely and reach high values.
+    """)
     return
 
 
@@ -210,6 +353,14 @@ def _(df, go, mo):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.4 Outstanding balances
+    """)
+    return
+
+
 @app.cell
 def _(df, pl):
     outstanding_profile = (
@@ -227,48 +378,33 @@ def _(df, pl):
     return (outstanding_profile,)
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 2.3 Outstanding balances
-    """)
-    return
-
-
 @app.cell
 def _(outstanding_profile):
     outstanding_profile
     return
 
 
-@app.cell
-def _(df, go, mo, pl):
-    _sample_n = min(10_000, df.height)
-    _plot_df = df.sample(n=_sample_n, seed=7) if df.height > _sample_n else df
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    We defined the target at 21 days, preferring it over the one at 14 days because it represented the last deadline before default.
 
-    _fig = go.Figure(
-    	go.Scattergl(
-    		x=_plot_df["amount_outstanding_14d"].to_list(),
-    		y=_plot_df["amount_outstanding_21d"].to_list(),
-    		mode="markers",
-    		marker={
-    			"size": 5,
-    			"opacity": 0.35,
-    			"color": _plot_df.select(pl.col("default_21d").cast(pl.Int8))["default_21d"].to_list(),
-    			"colorscale": [[0, "#2E86AB"], [1, "#C73E1D"]],
-    			"showscale": False,
-    		},
-    		text=_plot_df["loan_id"].to_list(),
-    		name="Loans",
-    	)
-    )
-    _fig.update_layout(
-    	title=f"Outstanding balance at 14 vs 21 days ({_sample_n:,} sampled loans)",
-    	xaxis_title="Amount outstanding after 14 days",
-    	yaxis_title="Amount outstanding after 21 days",
-    	height=520,
-    )
-    mo.ui.plotly(_fig)
+    Nonetheless, it may be also useful to predict 14-days default, as an extra signal that may prompt some action towards the customer.
+
+    The higher default rate at 14 days may amount to an easier prediction task, too.
+
+    From the data aggregated above, though, we can see that on average almost half of the outstanding gets recovered in the extra week granted by klarna before declaring a default; this suggests that the extra week is indeed useful and that leaving the threshold at 21 days may be the right choice.
+
+    Of course an appropriate assessment of this threshold should include the economic effects that this extra time has on klarna.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.5 Timing effect
+    """)
     return
 
 
@@ -326,6 +462,24 @@ def _(go, mo, monthly_profile):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    There seems to be a significant trend in the default rate, which decreases as time passes while the sample size is mostly constant if not increasing.
+
+    Is this actually a trend? a seasonal effect? random fluctuations? The time span of provided data is too short to tell, but it would definitely merit further investigations.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 2.6 Merchant dimensions
+    """)
+    return
+
+
 @app.cell
 def _(df, pl):
     merchant_group_profile = (
@@ -351,17 +505,21 @@ def _(df, pl):
     return merchant_category_profile, merchant_group_profile
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 2.4 Merchant dimensions
-    """)
-    return
-
-
 @app.cell
 def _(merchant_group_profile):
     merchant_group_profile
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    Merchant groups seem to be quite heterogeneous in number of loans, default rate and avg loan amounts.
+
+    Each merchant group showcasing different patterns in consumer habits would be typical; as a predictor, it's definitely a promising feature that can be encoded as categorical or possibly with some clever numerical embedding.
+
+    If this was not enough, a possible strategy would be dealing with at least some of the main groups separately, to make sure they get tailored predictions.
+    """)
     return
 
 
@@ -418,14 +576,6 @@ def _(categorical_columns, df, pl):
     return (categorical_profile,)
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 2.5 Categorical cardinality
-    """)
-    return
-
-
 @app.cell
 def _(categorical_profile):
     categorical_profile
@@ -438,14 +588,22 @@ def _(merchant_category_profile):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    The sub-division, "merchant category", starts having way too many unique values to be dealt properly as a categorical; moreover, there's way too many categories that are very small and would have to be clumped together.
+    """)
+    return
+
+
 @app.cell
 def _(mo):
     mo.md(r"""
     ## 3. Data quality
 
-    This section checks whether the dataset is internally consistent enough to
-    support modelling. The checks focus on missingness, uniqueness, valid ranges,
-    monotonic time windows, and target leakage considerations.
+    This section checks whether the dataset is internally consistent enough to support modelling.
+
+    The checks focus on missingness, uniqueness, valid ranges, monotonic time windows, and target leakage considerations.
     """)
     return
 
@@ -479,6 +637,24 @@ def _(missingness):
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    As we already noticed earlier, `existing_klarna_debt` is the only column having a substantial amount of missing values.
+
+    About `card_expiry_month` and `card_expiry_year`, the fact that the share of missing values is so small and that these columns appeared to be among the least interesting ones, makes us conclude that we can confidently ignore them for now.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 3.2 Uniqueness
+    """)
+    return
+
+
 @app.cell
 def _(df, pl):
     duplicate_row_count = int(df.is_duplicated().sum())
@@ -496,15 +672,7 @@ def _(df, pl):
     		"count": [duplicate_row_count, duplicate_loan_ids.height, duplicate_loan_id_rows],
     	}
     )
-    return duplicate_loan_ids, uniqueness_summary
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### 3.2 Uniqueness
-    """)
-    return
+    return (uniqueness_summary,)
 
 
 @app.cell
@@ -513,9 +681,21 @@ def _(uniqueness_summary):
     return
 
 
-@app.cell
-def _(duplicate_loan_ids):
-    duplicate_loan_ids.head(20)
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    No duplicate rows, that's good.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 3.3 Range and consistency checks
+
+    Based off our understanding of data, we can enforce some domain-driven checks on ranges, signs, consistency among columns, etc.
+    """)
     return
 
 
@@ -524,167 +704,166 @@ def _(df, pl):
     def count_where(predicate: pl.Expr) -> int:
     	return int(df.select(predicate.fill_null(False).sum()).item())
 
-    quality_checks = pl.DataFrame(
-    	[
-    		{
-    			"area": "identity",
-    			"check": "loan_id is missing",
-    			"issue_count": count_where(pl.col("loan_id").is_null()),
-    		},
-    		{
-    			"area": "dates",
-    			"check": "loan_issue_date is missing",
-    			"issue_count": count_where(pl.col("loan_issue_date").is_null()),
-    		},
-    		{
-    			"area": "amounts",
-    			"check": "loan_amount <= 0",
-    			"issue_count": count_where(pl.col("loan_amount") <= 0),
-    		},
-    		{
-    			"area": "amounts",
-    			"check": "amount_outstanding_14d outside [0, loan_amount]",
-    			"issue_count": count_where(
-    				(pl.col("amount_outstanding_14d") < 0)
-    				| (pl.col("amount_outstanding_14d") > pl.col("loan_amount"))
-    			),
-    		},
-    		{
-    			"area": "amounts",
-    			"check": "amount_outstanding_21d outside [0, loan_amount]",
-    			"issue_count": count_where(
-    				(pl.col("amount_outstanding_21d") < 0)
-    				| (pl.col("amount_outstanding_21d") > pl.col("loan_amount"))
-    			),
-    		},
-    		{
-    			"area": "amounts",
-    			"check": "amount_outstanding_21d > amount_outstanding_14d",
-    			"issue_count": count_where(
+    return (count_where,)
+
+
+@app.cell
+def _(count_where, pl):
+    # negative loan amount
+    count_where(pl.col("loan_amount") <= 0)
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # outstanding at 14 days negative or higher than initial amount
+    count_where((pl.col("amount_outstanding_14d") < 0)
+    				| (pl.col("amount_outstanding_14d") > pl.col("loan_amount")))
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # outstanding at 21 days negative or higher than initial amount
+    count_where((pl.col("amount_outstanding_21d") < 0)
+    				| (pl.col("amount_outstanding_21d") > pl.col("loan_amount")))
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # outstanding at 21 days higher than outstanding at 14 days
+    count_where(
     				pl.col("amount_outstanding_21d") > pl.col("amount_outstanding_14d")
-    			),
-    		},
-    		{
-    			"area": "card",
-    			"check": "card_expiry_month outside 1-12",
-    			"issue_count": count_where(
+    			)
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # card expiry date not a valid future date
+    count_where(
     				~pl.col("card_expiry_month").is_between(1, 12, closed="both")
-    			),
-    		},
-    		{
-    			"area": "customer history",
-    			"check": "negative existing debt, exposure, repayment, count, or tenure values",
-    			"issue_count": count_where(
-    				(pl.col("existing_klarna_debt") < 0)
-    				| (pl.col("num_active_loans") < 0)
-    				| (pl.col("days_since_first_loan") < 0)
-    				| (pl.col("new_exposure_7d") < 0)
-    				| (pl.col("new_exposure_14d") < 0)
-    				| (pl.col("num_confirmed_payments_3m") < 0)
-    				| (pl.col("num_confirmed_payments_6m") < 0)
-    				| (pl.col("num_failed_payments_3m") < 0)
-    				| (pl.col("num_failed_payments_6m") < 0)
-    				| (pl.col("num_failed_payments_1y") < 0)
-    				| (pl.col("amount_repaid_14d") < 0)
-    				| (pl.col("amount_repaid_1m") < 0)
-    				| (pl.col("amount_repaid_3m") < 0)
-    				| (pl.col("amount_repaid_6m") < 0)
-    				| (pl.col("amount_repaid_1y") < 0)
-    			),
-    		},
-    		{
-    			"area": "customer history",
-    			"check": "new_exposure_14d < new_exposure_7d",
-    			"issue_count": count_where(pl.col("new_exposure_14d") < pl.col("new_exposure_7d")),
-    		},
-    		{
-    			"area": "customer history",
-    			"check": "num_confirmed_payments_6m < num_confirmed_payments_3m",
-    			"issue_count": count_where(
-    				pl.col("num_confirmed_payments_6m") < pl.col("num_confirmed_payments_3m")
-    			),
-    		},
-    		{
-    			"area": "customer history",
-    			"check": "num_failed_payments_6m < num_failed_payments_3m",
-    			"issue_count": count_where(
-    				pl.col("num_failed_payments_6m") < pl.col("num_failed_payments_3m")
-    			),
-    		},
-    		{
-    			"area": "customer history",
-    			"check": "num_failed_payments_1y < num_failed_payments_6m",
-    			"issue_count": count_where(
-    				pl.col("num_failed_payments_1y") < pl.col("num_failed_payments_6m")
-    			),
-    		},
-    		{
-    			"area": "customer history",
-    			"check": "repayment windows are not monotonic",
-    			"issue_count": count_where(
-    				(pl.col("amount_repaid_1m") < pl.col("amount_repaid_14d"))
-    				| (pl.col("amount_repaid_3m") < pl.col("amount_repaid_1m"))
-    				| (pl.col("amount_repaid_6m") < pl.col("amount_repaid_3m"))
-    				| (pl.col("amount_repaid_1y") < pl.col("amount_repaid_6m"))
-    			),
-    		},
-    	]
-    ).with_columns((pl.col("issue_count") / df.height).round(4).alias("issue_share"))
-    return (quality_checks,)
+        | ~pl.col("card_expiry_month") > 2022
+    			)
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # negative existing debt
+    count_where(
+    				pl.col("existing_klarna_debt") < 0
+    			)
+    return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3.3 Range and consistency checks
+    As we already noticed when looking at distributions, negative values for debt don't have a clear cut explanation and should be investigated further. since they are so few, we can safely clamp them to zero for our purposes.
     """)
     return
 
 
 @app.cell
-def _(quality_checks):
-    quality_checks.sort("issue_count", descending=True)
+def _(count_where, pl):
+    # negative number of loans
+    count_where(
+    				pl.col("num_active_loans") < 0
+    			)
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # negative number of days since first loan
+    count_where(pl.col("days_since_first_loan") < 0)
     return
 
 
 @app.cell
 def _(df, pl):
-    date_range = df.select(
-    	pl.min("loan_issue_date").alias("min_loan_issue_date"),
-    	pl.max("loan_issue_date").alias("max_loan_issue_date"),
-    	pl.col("loan_issue_date").n_unique().alias("distinct_issue_dates"),
-    )
-    return (date_range,)
+    df.filter(pl.col("days_since_first_loan") < 0)
+    return
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### 3.4 Date coverage and leakage notes
+    Looks like `days_since_first_loan` is set to -1 whenever `num_active_loans` is zero. Is this true?
     """)
     return
 
 
 @app.cell
-def _(date_range):
-    date_range
+def _(df, pl):
+    df.filter((pl.col("days_since_first_loan") == 0) & (pl.col("num_active_loans") == 0))
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 4. Follow-up analysis ideas
-
-    - Choose a train/validation split that respects `loan_issue_date` to avoid
-      optimistic estimates from temporal leakage.
-    - Exclude `amount_outstanding_21d` from predictors because it defines the
-      target; treat `amount_outstanding_14d` as unavailable for underwriting unless
-      the intended scoring moment is after day 14.
-    - Investigate any non-zero quality-check counts before feature engineering.
-    - Compare default rates across loan amount bands, merchant dimensions, and
-      customer history features before moving into model development.
+    Actually, sometimes both columns are zeroed out; but most of the times, no active loans is reflected in a "-1" in number of days. we can probably just identify the two cases in one.
     """)
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # Numbers of payments < 0
+    count_where(				(pl.col("num_confirmed_payments_3m") < 0)
+    				| (pl.col("num_confirmed_payments_6m") < 0)
+    				| (pl.col("num_failed_payments_3m") < 0)
+    				| (pl.col("num_failed_payments_6m") < 0)
+    				| (pl.col("num_failed_payments_1y") < 0))
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # Monetary amounts < 0
+    count_where(
+				
+    				(pl.col("new_exposure_7d") < 0)
+    				| (pl.col("new_exposure_14d") < 0)
+    				| (pl.col("amount_repaid_14d") < 0)
+    				| (pl.col("amount_repaid_1m") < 0)
+    				| (pl.col("amount_repaid_3m") < 0)
+    				| (pl.col("amount_repaid_6m") < 0)
+    				| (pl.col("amount_repaid_1y") < 0)
+    			)
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # Exposure at 14 days lower than exposure at 7 days
+    count_where(pl.col("new_exposure_14d") < pl.col("new_exposure_7d"))
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # Number of payments lower at an earlier date
+    count_where(
+    				(pl.col("num_confirmed_payments_6m") < pl.col("num_confirmed_payments_3m"))
+        | 				(pl.col("num_failed_payments_6m") < pl.col("num_failed_payments_3m"))
+        | 				(pl.col("num_failed_payments_1y") < pl.col("num_failed_payments_6m"))
+    			)
+    return
+
+
+@app.cell
+def _(count_where, pl):
+    # Amount repaid higher at an earlier date
+    count_where(
+    				(pl.col("amount_repaid_1m") < pl.col("amount_repaid_14d"))
+    				| (pl.col("amount_repaid_3m") < pl.col("amount_repaid_1m"))
+    				| (pl.col("amount_repaid_6m") < pl.col("amount_repaid_3m"))
+    				| (pl.col("amount_repaid_1y") < pl.col("amount_repaid_6m"))
+    			)
     return
 
 
