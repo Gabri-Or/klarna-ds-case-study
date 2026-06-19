@@ -106,8 +106,8 @@ def test_train_and_calibrate_produces_probabilities(sample_train_data):
     X, y = sample_train_data
     X_train, X_test, y_train, y_test = split_data(X, y)
 
-    params = tune_hyperparameters(X_train, y_train, n_trials=2)
-    model, full_params = train_model(X_train, y_train, params)
+    study = tune_hyperparameters(X_train, y_train, n_trials=2)
+    model, full_params = train_model(X_train, y_train, study.best_params)
     probs = model.predict_proba(X_test)[:, 1]
     assert len(probs) == len(y_test)
     assert all(0 <= p <= 1 for p in probs)
