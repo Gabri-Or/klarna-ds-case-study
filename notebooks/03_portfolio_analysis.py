@@ -49,9 +49,19 @@ def _(mo):
 def _(Path, json, pl):
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
     DATA_PATH = PROJECT_ROOT / "data" / "processed" / "loans_processed.parquet"
+    RAW_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "mlcasestudy Final.csv"
     PARAMS_PATH = PROJECT_ROOT / "data" / "models" / "best_xgb_params.json"
 
     df = pl.read_parquet(DATA_PATH)
+
+    raw_df = pl.read_csv(RAW_DATA_PATH, try_parse_dates=True)
+    outstanding_21d = (
+        df.select("loan_id")
+        .join(raw_df.select("loan_id", "amount_outstanding_21d"), on="loan_id")[
+            "amount_outstanding_21d"
+        ]
+        .to_numpy()
+    )
 
     TARGET = "default_21d"
     NON_FEATURE_COLUMNS = ["loan_id", "loan_issue_date", "default_14d", TARGET]
@@ -69,6 +79,7 @@ def _(Path, json, pl):
         feature_df,
         loan_amounts,
         numeric_feature_df,
+        outstanding_21d,
         xgb_params,
         y,
     )
@@ -416,70 +427,91 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""
-    We model a simplified profit scenario:
+    The profit model uses actual data where possible:
 
-    - Each approved non-defaulting loan earns a revenue equal to a percentage of the loan amount.
-    - Each approved defaulting loan takes a loss equal to a percentage of the loan amount.
+    - **Revenue**: every approved loan (defaulted or not) earns a merchant fee, modeled as a percentage of the loan amount. Klarna charges merchants for "buy now pay later" — the consumer pays no interest.
+    - **Loss**: each approved default loses the actual outstanding balance at 21 days (`amount_outstanding_21d`), minus whatever fraction is eventually recovered through collections.
 
-    These rates are adjustable below.
+    Both rates are adjustable below.
     """)
     return
 
 
 @app.cell
 def _(mo):
-    revenue_rate_slider = mo.ui.slider(
+    merchant_fee_slider = mo.ui.slider(
         start=0.01,
         stop=0.10,
         step=0.005,
         value=0.03,
-        label="Revenue rate (per approved good loan)",
+        label="Merchant fee rate",
     )
-    loss_rate_slider = mo.ui.slider(
-        start=0.1,
+    recovery_rate_slider = mo.ui.slider(
+        start=0.0,
         stop=1.0,
         step=0.05,
-        value=0.5,
-        label="Loss rate (per approved default)",
+        value=0.0,
+        label="Recovery rate (fraction of outstanding recovered)",
     )
-    return loss_rate_slider, revenue_rate_slider
+    return merchant_fee_slider, recovery_rate_slider
 
 
 @app.cell
 def _(
     go,
     loan_amounts,
-    loss_rate_slider,
     lr_cv_probs,
+    merchant_fee_slider,
     mo,
+    outstanding_21d,
     perfect_probs,
     pl,
-    revenue_rate_slider,
+    recovery_rate_slider,
     thresholds,
     xgb_cv_probs,
     y,
 ):
-    _revenue_rate = revenue_rate_slider.value
-    _loss_rate = loss_rate_slider.value
+    _merchant_fee = merchant_fee_slider.value
+    _recovery_rate = recovery_rate_slider.value
 
-    def _compute_profit(y_true, y_prob, amounts, t, revenue_rate, loss_rate):
+    def _compute_profit(
+        y_true, y_prob, amounts, outstanding, t, merchant_fee, recovery_rate
+    ):
         approved = y_prob < t
-        good = approved & (y_true == 0)
-        bad = approved & (y_true == 1)
-        revenue = (amounts[good] * revenue_rate).sum()
-        loss = (amounts[bad] * loss_rate).sum()
-        return float(revenue - loss)
+        fee_revenue = (amounts[approved] * merchant_fee).sum()
+        credit_loss = (
+            outstanding[approved & (y_true == 1)] * (1 - recovery_rate)
+        ).sum()
+        return float(fee_revenue - credit_loss)
 
     _profit_rows = []
     for _t in thresholds:
         _lr_p = _compute_profit(
-            y, lr_cv_probs, loan_amounts, _t, _revenue_rate, _loss_rate
+            y,
+            lr_cv_probs,
+            loan_amounts,
+            outstanding_21d,
+            _t,
+            _merchant_fee,
+            _recovery_rate,
         )
         _xgb_p = _compute_profit(
-            y, xgb_cv_probs, loan_amounts, _t, _revenue_rate, _loss_rate
+            y,
+            xgb_cv_probs,
+            loan_amounts,
+            outstanding_21d,
+            _t,
+            _merchant_fee,
+            _recovery_rate,
         )
         _pf_p = _compute_profit(
-            y, perfect_probs, loan_amounts, _t, _revenue_rate, _loss_rate
+            y,
+            perfect_probs,
+            loan_amounts,
+            outstanding_21d,
+            _t,
+            _merchant_fee,
+            _recovery_rate,
         )
         _n_lr = int((lr_cv_probs < _t).sum())
         _n_xgb = int((xgb_cv_probs < _t).sum())
@@ -537,9 +569,18 @@ def _(
             marker={"color": "#2CA02C", "size": 14, "symbol": "star"},
         )
     )
-
+    _profit_fig.add_annotation(
+        x=_pf_ar,
+        y=_pf_profit,
+        text="perfect model",
+        showarrow=True,
+        arrowhead=2,
+        ax=-40,
+        ay=-25,
+        font={"color": "#2CA02C", "size": 12},
+    )
     _profit_fig.update_layout(
-        title=f"Portfolio profit vs. approval rate (revenue={_revenue_rate:.1%}, loss={_loss_rate:.0%})",
+        title=f"Portfolio profit (merchant fee={_merchant_fee:.1%}, recovery={_recovery_rate:.0%})",
         xaxis_title="Approval rate",
         yaxis_title="Profit",
         xaxis_tickformat=".0%",
@@ -571,8 +612,8 @@ def _(
     )
     mo.vstack(
         [
-            revenue_rate_slider,
-            loss_rate_slider,
+            merchant_fee_slider,
+            recovery_rate_slider,
             mo.ui.plotly(_profit_fig),
             optimal_thresholds,
         ]
