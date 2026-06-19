@@ -6,6 +6,7 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
+    import json
     import marimo as mo
     import numpy as np
     import optuna
@@ -35,6 +36,7 @@ def _():
         brier_score_loss,
         calibration_curve,
         go,
+        json,
         log_loss,
         mo,
         np,
@@ -68,7 +70,13 @@ def _(Path, pl):
     feature_df = df.drop(NON_FEATURE_COLUMNS)
     numeric_feature_df = feature_df.drop(CATEGORICAL_FEATURES)
     y = df[TARGET].to_numpy().astype(int)
-    return CATEGORICAL_FEATURES, feature_df, numeric_feature_df, y
+    return (
+        CATEGORICAL_FEATURES,
+        PROJECT_ROOT,
+        feature_df,
+        numeric_feature_df,
+        y,
+    )
 
 
 @app.cell
@@ -530,7 +538,33 @@ def _(comparison_df, go, mo, pl):
 def _(mo):
     mo.md(r"""
     Xgboost only slightly improves on a simple logistic regression; moreover, we need to calibrate it in order to get a comparable Brier score and calibration score.
+
+    Statistical metrics are not enough to decide on a model to take to production; the bottom line is not some abstract number, but the actual business impact.
+
+    For this, we will implement a separate portfolio analysis where we take the models to work and simulate their performance on the whole history of loans, at various risk thresholds.
+
+    In order to facilitate that, we save the best XGBoost parameters to a JSON file that can be easily loaded in the next notebook.
     """)
+    return
+
+
+@app.cell
+def _(PROJECT_ROOT, best_params, json, mo, scale_pos_weight):
+    PARAMS_PATH = PROJECT_ROOT / "data" / "models"
+    PARAMS_PATH.mkdir(parents=True, exist_ok=True)
+
+    xgb_config = {
+        **best_params,
+        "scale_pos_weight": scale_pos_weight,
+        "enable_categorical": True,
+        "tree_method": "hist",
+        "random_state": 42,
+        "eval_metric": "logloss",
+    }
+
+    _output_path = PARAMS_PATH / "best_xgb_params.json"
+    _output_path.write_text(json.dumps(xgb_config, indent=2))
+    mo.md(f"Best XGBoost params saved to `{_output_path.relative_to(PROJECT_ROOT)}`")
     return
 
 
