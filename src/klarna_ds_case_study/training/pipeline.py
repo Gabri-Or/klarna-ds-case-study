@@ -1,10 +1,17 @@
 import json
 import logging
+import tempfile
 
 import numpy as np
 import optuna
 import polars as pl
 import xgboost as xgb
+from optuna.visualization import (
+    plot_optimization_history,
+    plot_param_importances,
+    plot_parallel_coordinate,
+    plot_slice,
+)
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import (
     average_precision_score,
@@ -138,7 +145,22 @@ def tune_hyperparameters(X_train, y_train, n_trials=N_TRIALS):
 
     logger.info(f"Best CV ROC-AUC: {study.best_value:.4f}")
     logger.info(f"Best params: {study.best_params}")
-    return study.best_params
+    return study
+
+
+def log_optuna_plots(study):
+    plots = {
+        "optimization_history": plot_optimization_history(study),
+        "param_importances": plot_param_importances(study),
+        "parallel_coordinate": plot_parallel_coordinate(study),
+        "slice_plot": plot_slice(study),
+    }
+    with tempfile.TemporaryDirectory() as tmpdir:
+        for name, fig in plots.items():
+            path = f"{tmpdir}/{name}.html"
+            fig.write_html(path)
+            log_artifact(path)
+    logger.info("Logged Optuna visualization artifacts")
 
 
 def train_model(X_train, y_train, tuned_params):
@@ -177,8 +199,9 @@ def run_pipeline():
     X_train, X_test, y_train, y_test = split_data(X, y)
 
     with start_run(run_name="xgb-tuned-calibrated"):
-        best_params = tune_hyperparameters(X_train, y_train)
-        model, full_params = train_model(X_train, y_train, best_params)
+        study = tune_hyperparameters(X_train, y_train)
+        log_optuna_plots(study)
+        model, full_params = train_model(X_train, y_train, study.best_params)
 
         train_probs = model.predict_proba(X_train)[:, 1]
         test_probs = model.predict_proba(X_test)[:, 1]
