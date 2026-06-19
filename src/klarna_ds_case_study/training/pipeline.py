@@ -73,8 +73,10 @@ def split_data(X, y):
 
 
 def compute_scale_pos_weight(y_train):
-    return float(np.sum(y_train == 0) / np.sum(y_train == 1))
-
+    n_pos = int(np.sum(y_train == 1))
+    if n_pos == 0:
+        raise ValueError("compute_scale_pos_weight requires at least one positive sample")
+    return float(np.sum(y_train == 0) / n_pos)
 
 def compute_metrics(y_true, y_prob):
     return {
