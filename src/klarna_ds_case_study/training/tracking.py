@@ -37,6 +37,11 @@ def register_model(model, artifact_path: str = "model") -> None:
         sk_model=model,
         artifact_path=artifact_path,
         registered_model_name=REGISTERED_MODEL_NAME,
+        skops_trusted_types=[
+            "sklearn.calibration._CalibratedClassifier",
+            "xgboost.core.Booster",
+            "xgboost.sklearn.XGBClassifier",
+        ],
     )
     logger.info(
         f"Registered model as '{REGISTERED_MODEL_NAME}' under artifact path '{artifact_path}'"
