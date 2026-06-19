@@ -134,7 +134,7 @@ def tune_hyperparameters(X_train, y_train, n_trials=N_TRIALS):
         return np.mean(scores)
 
     study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=n_trials)
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
 
     logger.info(f"Best CV ROC-AUC: {study.best_value:.4f}")
     logger.info(f"Best params: {study.best_params}")
