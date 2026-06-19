@@ -1,5 +1,7 @@
 # Klarna Data Science Classification Case Study
 
+## Problem Statement
+
 This case consists of a supervised learning example, similar to what some Klarna teams are working with on a daily basis. Your task is to develop a model that predicts the probability of default on a purchase made with Klarna’s Pay Later payment method.
 
 Pay Later is effectively a loan Klarna issues to the consumer, to finance their purchase at the point of sale. It works as follows:
@@ -27,9 +29,20 @@ Your solution should contain:
 
 Our advice is to avoid spending too much time optimizing your prediction results. We are more interested in how you structure your solution, how you reason about the problem and how you validate your results. Showing off your skills in model building, analysis, and software engineering is more important than maximizing predictive performance. Good luck!
 
+## Project Setup
+
+Requires Python ≥3.12 and [uv](https://docs.astral.sh/uv/).
+
+```zsh
+uv sync
+pre-commit install
+```
+
+Pre-commit hooks run ruff format, ruff check, nbstripout, and detect-secrets.
+
 ## Data Processing Pipeline
 
-The exploratory notebook findings are distilled into a small Polars pipeline under `src/klarna_ds_case_study/`.
+The exploratory notebook findings are distilled into a small Polars pipeline under `src/klarna_ds_case_study/data_processing/`.
 
 The pipeline:
 
@@ -44,12 +57,43 @@ The pipeline:
 - drops post-issue outstanding-balance leakage columns from the modeling file;
 - writes `data/processed/loans_processed.parquet` with typed columns.
 
-Run it from the project root with:
-
 ```zsh
-PYTHONPATH=src uv run python -m klarna_ds_case_study.data_processing.main
+uv run python -m klarna_ds_case_study.data_processing.main
 ```
 
+## Training
+
+Runs Optuna hyperparameter search over an XGBoost classifier with stratified k-fold CV, tracks all trials in MLflow, and registers the best model.
+
+```zsh
+uv run python -m klarna_ds_case_study.training.main
+```
+
+Best parameters are saved to `data/models/best_xgb_params.json`.
+
+To browse experiment results:
+
+```zsh
+uv run mlflow ui
+```
+
+Then open http://127.0.0.1:5000.
+
+## Tests
+
+```zsh
+uv run pytest
+```
+
+## Notebooks
+
+Interactive notebooks live in `notebooks/` as marimo scripts.
+
+```zsh
+uv run marimo edit notebooks/01_eda_and_quality.py
+```
+
+Replace the filename to open a different notebook.
 
 ## Data Dictionary
 
