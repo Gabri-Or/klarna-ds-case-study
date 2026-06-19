@@ -87,8 +87,8 @@ def test_split_data_stratifies(sample_train_data):
 @patch("klarna_ds_case_study.training.pipeline.N_CV_FOLDS", 2)
 def test_tune_hyperparameters_returns_params(sample_train_data):
     X, y = sample_train_data
-    params = tune_hyperparameters(X, y, n_trials=2)
-    expected_keys = {
+    study = tune_hyperparameters(X, y, n_trials=2)
+    params = study.best_params
         "n_estimators",
         "max_depth",
         "learning_rate",
