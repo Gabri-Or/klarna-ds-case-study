@@ -11,7 +11,7 @@ Prerequisites: Python ≥3.12 and [uv](https://docs.astral.sh/uv/).
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Install just (command runner)
-uv tool install just
+uv tool install rust-just
 
 # Install all dependencies (including dev tools) and the project itself
 uv sync
