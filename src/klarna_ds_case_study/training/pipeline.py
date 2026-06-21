@@ -22,6 +22,7 @@ from sklearn.metrics import (
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from klarna_ds_case_study.training.config import (
+    CATEGORICAL_CATEGORIES_PATH,
     CATEGORICAL_FEATURES,
     MODELS_DIR,
     N_CV_FOLDS,
@@ -202,6 +203,9 @@ def _save_params_json(params):
 
 def run_pipeline():
     X, y = load_training_data()
+    categorical_categories = {
+        col: sorted(X[col].cat.categories.tolist()) for col in CATEGORICAL_FEATURES
+    }
     X_train, X_test, y_train, y_test = split_data(X, y)
 
     with start_run(run_name="xgb-tuned-calibrated"):
@@ -223,11 +227,11 @@ def run_pipeline():
         log_artifact(params_path)
         register_model(calibrated)
 
-    _save_model_locally(calibrated)
+    _save_model_locally(calibrated, categorical_categories)
     logger.info("Training pipeline complete")
 
 
-def _save_model_locally(model):
+def _save_model_locally(model, categorical_categories):
     import shutil
     import mlflow.sklearn
 
@@ -243,3 +247,5 @@ def _save_model_locally(model):
         ],
     )
     logger.info(f"Saved serving model to {SERVING_MODEL_DIR}")
+    CATEGORICAL_CATEGORIES_PATH.write_text(json.dumps(categorical_categories, indent=2))
+    logger.info(f"Saved categorical categories to {CATEGORICAL_CATEGORIES_PATH}")

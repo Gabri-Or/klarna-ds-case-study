@@ -1,3 +1,4 @@
+import json
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -9,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from klarna_ds_case_study.training.config import (
+    CATEGORICAL_CATEGORIES_PATH,
     CATEGORICAL_FEATURES,
     PROCESSED_DATA_PATH,
     SERVING_MODEL_DIR,
@@ -23,6 +25,13 @@ categorical_dtypes: dict[str, pd.CategoricalDtype] = {}
 
 
 def _load_categorical_dtypes():
+    if CATEGORICAL_CATEGORIES_PATH.exists():
+        categories = json.loads(CATEGORICAL_CATEGORIES_PATH.read_text())
+        return {
+            col: pd.CategoricalDtype(categories=categories[col])
+            for col in CATEGORICAL_FEATURES
+        }
+    # Optional dev fallback: derive categories from processed data
     df = pl.read_parquet(PROCESSED_DATA_PATH, columns=CATEGORICAL_FEATURES)
     return {
         col: pd.CategoricalDtype(categories=sorted(df[col].unique().to_list()))
