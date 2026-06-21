@@ -1,99 +1,106 @@
 # Klarna Data Science Classification Case Study
 
-## Problem Statement
+Predicts the probability of default on Pay Later loans using a calibrated XGBoost model.
 
-This case consists of a supervised learning example, similar to what some Klarna teams are working with on a daily basis. Your task is to develop a model that predicts the probability of default on a purchase made with Klarna’s Pay Later payment method.
+## Quick Start
 
-Pay Later is effectively a loan Klarna issues to the consumer, to finance their purchase at the point of sale. It works as follows:
-
-- Consumers shop with Klarna, but pay for their purchase 14 days later. This allows consumers to see and feel, or try on the goods before having to pay for them.
-- If the consumer has not paid Klarna after these 14 days, they will get a reminder and be given another 7 days to pay.
-- If the customer has still not paid back after that period, they will enter debt collection and the debt is either sold off to debt collectors or eventually written off by Klarna. This is a “default”.
-
-Your model will be used by the team responsible for Underwriting - this is the Klarna team who decides which loans to issue, based on the probability of default (and accept or decline transactions accordingly). This team expects to have accurate predictions and needs to have the flexibility to choose the level of credit risk Klarna takes.
-
-To this end you are provided with a dataset that contains:
-
-- The id of the loan
-- The date the loan was issued
-- The size of the loan
-- The outstanding balance of the loan 14 and 21 days after it was issued.
-
-Along with a number of features that you can use as predictors in your model. We use Python for modeling at Klarna so please use this programming language to craft your submission. A data dictionary is also supplied on the page below.
-
-Your solution should contain:
-
-- Code to host an API, which a reviewer should be able to host on their local system and make requests to.
-- A 1-pager that summarizes how you chose a target definition, trained your model, and evaluated performance.
-- Any code used to explore the data or develop the model, which a reviewer should be able to follow.
-
-Our advice is to avoid spending too much time optimizing your prediction results. We are more interested in how you structure your solution, how you reason about the problem and how you validate your results. Showing off your skills in model building, analysis, and software engineering is more important than maximizing predictive performance. Good luck!
-
-## Project Setup
-
-Requires Python ≥3.12 and [uv](https://docs.astral.sh/uv/).
+Prerequisites: Python ≥3.12 and [uv](https://docs.astral.sh/uv/).
 
 ```zsh
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install just (command runner)
+uv tool install just
+
+# Install all dependencies (including dev tools) and the project itself
 uv sync
-pre-commit install
+
+# Start the prediction API
+just serve
 ```
 
-Pre-commit hooks run ruff format, ruff check, nbstripout, and detect-secrets.
+The API is now running at http://127.0.0.1:8000. Interactive docs at http://127.0.0.1:8000/docs.
 
-## Data Processing Pipeline
+## Making Predictions
 
-The exploratory notebook findings are distilled into a small Polars pipeline under `src/klarna_ds_case_study/data_processing/`.
-
-The pipeline:
-
-- loads `data/raw/mlcasestudy Final.csv` with explicit Polars dtypes;
-- validates raw and processed dataframes with Pandera's Polars integration;
-- creates `default_14d` and `default_21d` targets from outstanding balances;
-- removes exact duplicates and duplicate `loan_id` rows, keeping the first occurrence;
-- imputes small card expiry missingness;
-- imputes missing `existing_klarna_debt` to zero and clamps negative values to zero;
-- maps negative `days_since_first_loan` sentinel values to zero;
-- collapses sparse `merchant_category` values into `Other`;
-- drops post-issue outstanding-balance leakage columns from the modeling file;
-- writes `data/processed/loans_processed.parquet` with typed columns.
+In another terminal:
 
 ```zsh
-uv run python -m klarna_ds_case_study.data_processing.main
+just predict
 ```
 
-## Training
-
-Runs Optuna hyperparameter search over an XGBoost classifier with stratified k-fold CV, tracks all trials in MLflow, and registers the best model.
+Or manually:
 
 ```zsh
-uv run python -m klarna_ds_case_study.training.main
+curl -X POST http://127.0.0.1:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "loan_amount": 5000,
+    "card_expiry_month": 6,
+    "card_expiry_year": 2027,
+    "existing_klarna_debt": 0,
+    "num_active_loans": 1,
+    "days_since_first_loan": 120,
+    "new_exposure_7d": 0,
+    "new_exposure_14d": 0,
+    "num_confirmed_payments_3m": 3,
+    "num_confirmed_payments_6m": 5,
+    "num_failed_payments_3m": 0,
+    "num_failed_payments_6m": 0,
+    "num_failed_payments_1y": 0,
+    "amount_repaid_14d": 2000,
+    "amount_repaid_1m": 4000,
+    "amount_repaid_3m": 8000,
+    "amount_repaid_6m": 12000,
+    "amount_repaid_1y": 15000,
+    "merchant_group": "Entertainment",
+    "merchant_category": "Event Tickets"
+  }'
 ```
 
-Best parameters are saved to `data/models/best_xgb_params.json`.
+Response: `{"default_probability": 0.0399...}`
 
-To browse experiment results:
+## Available Commands
+
+All commands are defined in the `justfile`. Run `just` to see the full list.
+
+| Command | Description |
+| --- | --- |
+| `just setup` | Install dependencies and pre-commit hooks |
+| `just serve` | Start the prediction API with hot-reload |
+| `just predict` | Send a sample request to the running API |
+| `just test` | Run the test suite |
+| `just process` | Run the data processing pipeline |
+| `just train` | Run model training (Optuna + MLflow) |
+| `just mlflow-ui` | Launch the MLflow experiment browser |
+| `just notebook` | Open a marimo notebook |
+
+## How It Works
+
+The trained model is saved to `data/models/serving_model/` and committed to the repo. The API loads it directly at startup — no MLflow server required.
+
+To use a model from the MLflow registry instead:
 
 ```zsh
-uv run mlflow ui
+MODEL_URI="models:/loan-default-prediction/latest" just serve
 ```
-
-Then open http://127.0.0.1:5000.
 
 ## Tests
 
 ```zsh
-uv run pytest
+just test
 ```
 
 ## Notebooks
 
-Interactive notebooks live in `notebooks/` as marimo scripts.
+Interactive marimo notebooks for EDA, modeling experiments, and portfolio analysis:
 
 ```zsh
-uv run marimo edit notebooks/01_eda_and_quality.py
+just notebook                              # opens 01_eda_and_quality.py
+just notebook file=02_modeling_experiments.py
+just notebook file=03_portfolio_analysis.py
 ```
-
-Replace the filename to open a different notebook.
 
 ## Data Dictionary
 
@@ -104,11 +111,11 @@ Replace the filename to open a different notebook.
 | `loan_amount` | The value of the loan being underwritten |
 | `amount_outstanding_14d` | How much of the loan remained unpaid 14 days after the loan was issued |
 | `amount_outstanding_21d` | How much of the loan remained unpaid 21 days after the loan was issued |
-| `card_expiry_month` | The month the consumer’s payment card will expire |
-| `card_expiry_year` | The year the consumer’s payment card will expire |
+| `card_expiry_month` | The month the consumer's payment card will expire |
+| `card_expiry_year` | The year the consumer's payment card will expire |
 | `existing_klarna_debt` | How much the consumer already owed to Klarna at the time the loan was issued |
 | `num_active_loans` | The number of loans the consumer needed to repay at the time the loan was issued |
-| `days_since_first_loan` | How many days had passed since the consumer’s first loan, as of the time the current loan was issued |
+| `days_since_first_loan` | How many days had passed since the consumer's first loan, as of the time the current loan was issued |
 | `new_exposure_7d` | How much Klarna had lent the consumer 7 days before the loan was issued |
 | `new_exposure_14d` | How much Klarna had lent the consumer 14 days before the loan was issued |
 | `num_confirmed_payments_3m` | How many repayments towards other loans the consumer had made 3 months before the loan was issued |
