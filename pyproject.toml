@@ -25,6 +25,9 @@ dev = [
     "marimo>=0.23.9",
     "pre-commit>=4.6.0",
     "pytest>=9.1.0",
+    "shap>=0.52.0",
+    "pydantic-ai-slim>=1.107.0",
+    "openai>=2.43.0",
 ]
 
 [build-system]
