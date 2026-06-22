@@ -16,8 +16,6 @@ def _():
     import xgboost as xgb
     from pathlib import Path
     from sklearn.inspection import permutation_importance
-    from sklearn.metrics import roc_auc_score, average_precision_score
-    from sklearn.model_selection import StratifiedKFold, train_test_split
 
     from klarna_ds_case_study.training.config import CATEGORICAL_FEATURES
     from klarna_ds_case_study.training.pipeline import (
