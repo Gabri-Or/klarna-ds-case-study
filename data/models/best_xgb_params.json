@@ -1,0 +1,15 @@
+{
+  "n_estimators": 313,
+  "max_depth": 3,
+  "learning_rate": 0.02262092083208865,
+  "subsample": 0.8746428967337366,
+  "colsample_bytree": 0.9601194444244501,
+  "min_child_weight": 13,
+  "reg_alpha": 0.15100646588483962,
+  "reg_lambda": 0.00010229821571021537,
+  "scale_pos_weight": 17.378361732703755,
+  "enable_categorical": true,
+  "tree_method": "hist",
+  "random_state": 42,
+  "eval_metric": "logloss"
+}
