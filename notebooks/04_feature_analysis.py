@@ -36,7 +36,6 @@ def _():
         np,
         pd,
         permutation_importance,
-        pl,
         px,
         shap,
         split_data,
@@ -406,13 +405,13 @@ def _(mo):
 @app.cell
 def _():
     corr_features_to_remove = [
-        "num_confirmed_payments_3m"
-        "amount_repaid_6m"
-        "amount_repaid_1m"
-        "amount_repaid_3m"
-        "new_exposure_7d"
+        "num_confirmed_payments_3m",
+        "amount_repaid_6m",
+        "amount_repaid_1m",
+        "amount_repaid_3m",
+        "new_exposure_7d",
     ]
-    return
+    return (corr_features_to_remove,)
 
 
 @app.cell
@@ -589,6 +588,7 @@ def _(
     X_train,
     baseline_test_metrics,
     compute_metrics,
+    corr_features_to_remove,
     least_important_features,
     mo,
     new_feature_names,
@@ -599,6 +599,8 @@ def _(
     y_train,
 ):
     import json
+    from itertools import product
+    from sklearn.calibration import CalibratedClassifierCV
 
     best_params = json.loads(
         (PROJECT_ROOT / "data" / "models" / "best_xgb_params.json").read_text()
@@ -612,7 +614,10 @@ def _(
         model = xgb.XGBClassifier(**{**best_params, "scale_pos_weight": spw})
         model.fit(Xtr, y_train)
 
-        probs_test = model.predict_proba(Xte)[:, 1]
+        calibrated = CalibratedClassifierCV(model, method="isotonic", cv=5)
+        calibrated.fit(Xtr, y_train)
+
+        probs_test = calibrated.predict_proba(Xte)[:, 1]
         metrics = compute_metrics(y_test, probs_test)
 
         return {"experiment": name, "n_features": Xtr.shape[1], **metrics}
@@ -621,91 +626,45 @@ def _(
 
     results = [
         {
-            "experiment": "calibrated baseline (serving model)",
+            "experiment": "baseline (serving model)",
             "n_features": len(original_cols),
             **baseline_test_metrics,
         },
-        evaluate_feature_set(X_engineered, "baseline + engineered"),
     ]
 
-    pruned_cols = [c for c in original_cols if c not in least_important_features]
-    results.append(evaluate_feature_set(X_engineered[pruned_cols], "pruned baseline"))
+    for drop_importance, drop_corr, add_engineered in product([False, True], repeat=3):
+        if not drop_importance and not drop_corr and not add_engineered:
+            results.append(
+                evaluate_feature_set(
+                    X_engineered[original_cols], "original (retrained)"
+                )
+            )
+            continue
 
-    pruned_eng_cols = [
-        c for c in X_engineered.columns if c not in least_important_features
-    ]
-    results.append(
-        evaluate_feature_set(X_engineered[pruned_eng_cols], "pruned + engineered")
-    )
+        parts = []
+        cols_to_drop = set()
+
+        if drop_importance:
+            cols_to_drop.update(least_important_features)
+            parts.append("−importance")
+        if drop_corr:
+            cols_to_drop.update(corr_features_to_remove)
+            parts.append("−corr")
+
+        if add_engineered:
+            base_cols = [c for c in X_engineered.columns if c not in cols_to_drop]
+            parts.append("+engineered")
+        else:
+            base_cols = [c for c in original_cols if c not in cols_to_drop]
+
+        name = " ".join(parts)
+        results.append(evaluate_feature_set(X_engineered[base_cols], name))
 
     results_df = pd.DataFrame(results)
     mo.md(f"""
-    **Benchmark results (test set):**
+    **Benchmark results (test set, all models calibrated with isotonic regression):**
 
     {mo.as_html(results_df)}
-
-    Note: experiments retrain uncalibrated XGB with the same hyperparameters.
-    The calibrated baseline is the serving model loaded from disk.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    ## 7. Leakage & validity checks
-
-    **Features to scrutinize:**
-    - `amount_repaid_14d`, `new_exposure_7d`, `new_exposure_14d` — these time windows
-      could overlap with the 21-day default observation window. If they measure activity
-      *after* loan issuance, they are leaky. Verify with domain context.
-    - `card_expiry_month` / `card_expiry_year` — heavily imputed and likely low-signal.
-      If permutation importance confirms negligible contribution, drop them.
-
-    **Temporal validation:**
-    The current split is random. If `loan_issue_date` spans enough time, a temporal
-    split (train on older, test on newer) would give a more realistic performance
-    estimate and catch distribution drift.
-    """)
-    return
-
-
-@app.cell
-def _(PROJECT_ROOT, mo, pl):
-    _df = pl.read_parquet(
-        PROJECT_ROOT / "data" / "processed" / "loans_processed.parquet"
-    )
-    date_range = _df.select(
-        pl.col("loan_issue_date").min().alias("min_date"),
-        pl.col("loan_issue_date").max().alias("max_date"),
-    ).row(0)
-    span_days = (date_range[1] - date_range[0]).days
-
-    mo.md(f"""
-    **Date range:** {date_range[0]} to {date_range[1]} ({span_days} days)
-
-    {"⚠️ Short time span — temporal split may not be reliable." if span_days < 180 else "✓ Sufficient span for a temporal validation split."}
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    mo.md("""
-    ## 8. Summary & recommendations
-
-    Based on this analysis:
-
-    1. **Drop low-importance features** — reduces noise and speeds up training with
-       minimal (if any) performance loss.
-    2. **Add ratio/delta features** — especially `debt_to_loan_ratio`,
-       `failed_to_confirmed_3m`, and repayment deltas which capture behavioral velocity.
-    3. **Investigate potential leakage** in `amount_repaid_14d` and `new_exposure_*`
-       features — if they measure post-loan-issuance activity, remove them.
-    4. **Consider temporal validation** if date span allows it, to detect overfitting
-       to time-specific patterns.
-    5. **Highly correlated cumulative features** (e.g., `amount_repaid_3m` vs `6m` vs `1y`)
-       can be replaced by their deltas to reduce multicollinearity without losing signal.
     """)
     return
 
