@@ -11,10 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
       - uses: astral-sh/setup-uv@v6
 
-      - run: uv sync --dev
-
+      - run: uv sync --dev --frozen
       - run: uv run pytest
 
 
