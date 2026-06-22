@@ -542,16 +542,21 @@ def _(CATEGORICAL_FEATURES, X, pd):
         # Exposure acceleration (second week)
         Xe["exposure_acceleration"] = Xe["new_exposure_14d"] - Xe["new_exposure_7d"]
 
-        # Delta features (recent vs older behavior)
+        # Delta features (time-span differences to replace correlated cumulative features)
         Xe["repaid_delta_1m_minus_14d"] = (
             Xe["amount_repaid_1m"] - Xe["amount_repaid_14d"]
         )
         Xe["repaid_delta_3m_minus_1m"] = Xe["amount_repaid_3m"] - Xe["amount_repaid_1m"]
+        Xe["repaid_delta_6m_minus_3m"] = Xe["amount_repaid_6m"] - Xe["amount_repaid_3m"]
+        Xe["repaid_delta_1y_minus_6m"] = Xe["amount_repaid_1y"] - Xe["amount_repaid_6m"]
         Xe["failed_delta_6m_minus_3m"] = (
             Xe["num_failed_payments_6m"] - Xe["num_failed_payments_3m"]
         )
         Xe["failed_delta_1y_minus_6m"] = (
             Xe["num_failed_payments_1y"] - Xe["num_failed_payments_6m"]
+        )
+        Xe["confirmed_delta_6m_minus_3m"] = (
+            Xe["num_confirmed_payments_6m"] - Xe["num_confirmed_payments_3m"]
         )
 
         # Loan intensity
