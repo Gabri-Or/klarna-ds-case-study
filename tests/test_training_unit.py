@@ -89,6 +89,7 @@ def test_tune_hyperparameters_returns_params(sample_train_data):
     X, y = sample_train_data
     study = tune_hyperparameters(X, y, n_trials=2)
     params = study.best_params
+    expected_keys = {
         "n_estimators",
         "max_depth",
         "learning_rate",
