@@ -172,8 +172,12 @@ def _(average_precision_score, brier_score_loss, log_loss, np, roc_auc_score):
     def compute_ece(y_true, y_prob, n_bins=10):
         bin_edges = np.linspace(0, 1, n_bins + 1)
         ece = 0.0
-for i, (lo, hi) in enumerate(zip(bin_edges[:-1], bin_edges[1:])):
-    mask = (y_prob >= lo) & (y_prob <= hi) if i == n_bins - 1 else (y_prob >= lo) & (y_prob < hi)
+        for i, (lo, hi) in enumerate(zip(bin_edges[:-1], bin_edges[1:])):
+            mask = (
+                (y_prob >= lo) & (y_prob <= hi)
+                if i == n_bins - 1
+                else (y_prob >= lo) & (y_prob < hi)
+            )
             if mask.sum() == 0:
                 continue
             avg_predicted = y_prob[mask].mean()
@@ -565,6 +569,11 @@ def _(PROJECT_ROOT, best_params, json, mo, scale_pos_weight):
     _output_path = PARAMS_PATH / "best_xgb_params.json"
     _output_path.write_text(json.dumps(xgb_config, indent=2))
     mo.md(f"Best XGBoost params saved to `{_output_path.relative_to(PROJECT_ROOT)}`")
+    return
+
+
+@app.cell
+def _():
     return
 
 

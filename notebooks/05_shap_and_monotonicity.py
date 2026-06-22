@@ -262,6 +262,7 @@ def _(X_train, best_params, monotone_constraints_tuple, spw, xgb, y_train):
 
     model_constrained = xgb.XGBClassifier(**constrained_params)
     model_constrained.fit(X_train, y_train)
+
     return (model_constrained,)
 
 

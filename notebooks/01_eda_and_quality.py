@@ -31,18 +31,22 @@ def _(Path):
 
 @app.cell
 def _(DATA_PATH, pl):
-    df = pl.scan_csv(DATA_PATH, try_parse_dates=True)
+    df = pl.read_csv(DATA_PATH, try_parse_dates=True).with_columns(
+        (pl.col("amount_outstanding_14d") > 0).alias("default_14d"),
+        (pl.col("amount_outstanding_21d") > 0).alias("default_21d"),
+    )
 
     row_count = df.height
     column_count = df.width
-    return column_count, df, row_count
+    default_rate = df.select(pl.mean("default_21d")).item()
+    return column_count, default_rate, df, row_count
 
 
 @app.cell
 def _(column_count, default_rate, mo, row_count):
-    mo.md(
-        f"The dataset consists of {row_count:,} rows and {column_count:,} columns, with a 21-day default rate of {default_rate:.1%}."
-    )
+    mo.md(f"""
+    The dataset consists of {row_count:,} rows and {column_count:,} columns, with a 21-day default rate of {default_rate:.1%}.
+    """)
     return
 
 
