@@ -34,6 +34,11 @@ A reproducible pipeline (`just process`) loads the raw CSV, validates it against
 - [src/klarna_ds_case_study/data_processing/schemas.py](../src/klarna_ds_case_study/data_processing/schemas.py) — pandera schemas
 - [src/klarna_ds_case_study/data_processing/config.py](../src/klarna_ds_case_study/data_processing/config.py) — paths and constants
 
+Please note that all datasets have been versioned on Git for ease of reproducibility. 
+Best practices would suggest to use some data versioning tool (e.g. DVC) to manage the datasets, but that would require
+a more complex setup and resources.
+
+
 ## 3. Modeling
 
 The modeling notebook iterates through progressively stronger approaches:
