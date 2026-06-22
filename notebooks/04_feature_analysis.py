@@ -369,7 +369,7 @@ def _(mo):
 
 @app.cell
 def _(corr_matrix, mo, np, pd):
-    # Find highly correlated pairs (|r| > 0.85)
+    # Find highly correlated pairs (|r| > 0.75)
     upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
     high_corr_pairs = [
         (col, row, round(upper_tri.loc[row, col], 3))
