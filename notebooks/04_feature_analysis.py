@@ -674,5 +674,34 @@ def _(
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    All feature sets perform similarly, with no boost from engineered features and little to no drop from removing least important and/or highly correlated features.
+
+    In conclusion, we decide to keep the minimal feature set due to the lack of evidence of improvement from the engineered features and the benefits of a simpler model with fewer features, such as reduced risk of overfitting, easier interpretability, and lower computational requirements.
+    """)
+    return
+
+
+@app.cell
+def _(corr_features_to_remove, least_important_features):
+    final_features_to_remove = list(
+        set(least_important_features) | set(corr_features_to_remove)
+    )
+    return (final_features_to_remove,)
+
+
+@app.cell
+def _(final_features_to_remove):
+    final_features_to_remove
+    return
+
+
+@app.cell
+def _():
+    return
+
+
 if __name__ == "__main__":
     app.run()
